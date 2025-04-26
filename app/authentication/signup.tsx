@@ -8,17 +8,7 @@ import {
   Alert,
   SafeAreaView,
 } from "react-native";
-import { auth } from "@/config/firebaseConfig";
-import {
-  createUserWithEmailAndPassword,
-  updateProfile,
-  GoogleAuthProvider,
-  signInWithCredential,
-} from "firebase/auth";
-import {
-  GoogleSignin,
-  statusCodes,
-} from "@react-native-google-signin/google-signin";
+import { supabase } from "@/config/SupabaseConfiguration";
 import { useRouter } from "expo-router";
 import { OrDivider } from "@/components/OrDivider";
 import { GoogleButton } from "@/components/GoogleButton";
@@ -29,80 +19,84 @@ const SignUpScreen: React.FC = () => {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [confirmPassword, setConfirmPassword] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [googleLoading, setGoogleLoading] = useState<boolean>(false);
 
   const router = useRouter();
 
   const handleSignUp = async () => {
     try {
+      setLoading(true);
       if (!firstName || !lastName || !email || !password || !confirmPassword) {
         Alert.alert("Error", "Please fill out all fields.");
         return;
       }
-
       if (password !== confirmPassword) {
         Alert.alert("Error", "Passwords do not match.");
         return;
       }
 
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
-      );
-
-      const fullName = `${firstName} ${lastName}`;
-      await updateProfile(userCredential.user, {
-        displayName: fullName,
+        options: {
+          data: {
+            first_name: firstName,
+            last_name: lastName,
+            full_name: `${firstName} ${lastName}`,
+          },
+        },
       });
 
-      Alert.alert("Success", "Account created successfully!");
-      router.replace("/");
+      Alert.alert(
+        "Success",
+        "Registration successful! Please check your email for verification.",
+        [
+          {
+            text: "OK",
+            onPress: () => router.replace("/authentication/login"),
+          },
+        ],
+      );
     } catch (error: any) {
       Alert.alert("Sign-Up Error", error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleGoogleSignup = async () => {
     try {
-      await GoogleSignin.hasPlayServices();
-      const signInResult = await GoogleSignin.signIn();
-      const credential = GoogleAuthProvider.credential(
-        signInResult.data?.idToken,
-      );
-
-      const userCredential = await signInWithCredential(auth, credential);
-      const firebaseUser = userCredential.user;
-
-      console.log("Firebase user created:", {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName,
+      setGoogleLoading(true);
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          scopes: "email profile",
+        },
       });
-      router.push("/");
     } catch (error: any) {
-      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        console.log("User cancelled the login flow");
-      } else if (error.code === statusCodes.IN_PROGRESS) {
-        console.log("Operation is in progress already");
-      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        Alert.alert("Error", "Play services not available or outdated");
-      } else {
-        console.error("Other error:", error);
-        Alert.alert("Error", "An error occurred during Google sign in");
-      }
+      console.error("Google sign-in error:", error);
+      Alert.alert("Error", "An error occurred during Google sign in");
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Row 1: Heading */}
       <View style={styles.headingRow}>
         <Text style={styles.appName}>APP NAME</Text>
       </View>
 
-      {/* Row 2: Main Content / Form */}
       <View style={styles.mainRow}>
         <Text style={styles.title}>Sign Up</Text>
+        {/* TODO: Cofigure and test */}
+        {/* <GoogleButton */}
+        {/*   onPress={handleGoogleSignup} */}
+        {/*   text={googleLoading ? "Connecting..." : "Sign Up with Google"} */}
+        {/*   disabled={googleLoading} */}
+        {/* /> */}
+        {/* <OrDivider /> */}
         <View style={styles.nameRow}>
           <TextInput
             style={[styles.input, styles.nameInput]}
@@ -150,13 +144,15 @@ const SignUpScreen: React.FC = () => {
           onChangeText={(text) => setConfirmPassword(text)}
         />
 
-        <TouchableOpacity style={styles.button} onPress={handleSignUp}>
-          <Text style={styles.buttonText}>Sign Up</Text>
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleSignUp}
+          disabled={loading}
+        >
+          <Text style={styles.buttonText}>
+            {loading ? "Creating Account..." : "Sign Up"}
+          </Text>
         </TouchableOpacity>
-
-        <OrDivider />
-
-        <GoogleButton onPress={handleGoogleSignup} text="Sign Up with Google" />
 
         <TouchableOpacity
           onPress={() => router.replace("/authentication/login")}
@@ -228,6 +224,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginVertical: 10,
+  },
+  buttonDisabled: {
+    backgroundColor: "#a6cbef",
   },
   buttonText: {
     color: "#fff",

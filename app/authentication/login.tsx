@@ -8,12 +8,7 @@ import {
   Alert,
   SafeAreaView,
 } from "react-native";
-import { auth } from "@/config/firebaseConfig";
-import {
-  signInWithEmailAndPassword,
-  signInWithCredential,
-  GoogleAuthProvider,
-} from "firebase/auth";
+import { supabase } from "@/config/SupabaseConfiguration";
 import {
   GoogleSignin,
   statusCodes,
@@ -25,19 +20,31 @@ import { GoogleButton } from "@/components/GoogleButton";
 const LoginScreen: React.FC = () => {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
   const router = useRouter();
 
   const handleLogin = async () => {
     try {
+      setLoading(true);
+
       if (!email || !password) {
         Alert.alert("Error", "Please enter email and password.");
         return;
       }
-      await signInWithEmailAndPassword(auth, email, password);
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
       Alert.alert("Success", "Logged in successfully!");
       router.replace("/");
     } catch (error: any) {
       Alert.alert("Login Error", error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -45,18 +52,19 @@ const LoginScreen: React.FC = () => {
     try {
       await GoogleSignin.hasPlayServices();
       const signInResult = await GoogleSignin.signIn();
-      const credential = GoogleAuthProvider.credential(
-        signInResult.data?.idToken,
-      );
 
-      const userCredential = await signInWithCredential(auth, credential);
-      const firebaseUser = userCredential.user;
+      if (!signInResult.data?.idToken)
+        throw new Error("No ID token present in Google Sign-In result");
 
-      console.log("Firebase user created:", {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName,
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: "google",
+        token: signInResult.data.idToken,
       });
+
+      if (error) throw error;
+
+      console.log("User signed in:", data.user);
+      router.replace("/");
     } catch (error: any) {
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
         console.log("User cancelled the login flow");
@@ -71,6 +79,10 @@ const LoginScreen: React.FC = () => {
     }
   };
 
+  const handleForgotPassword = () => {
+    console.log("handle reset password here");
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Row 1: Heading */}
@@ -81,6 +93,9 @@ const LoginScreen: React.FC = () => {
       {/* Row 2: Main Content / Form */}
       <View style={styles.mainRow}>
         <Text style={styles.title}>Log In</Text>
+        {/* TODO: Cofigure and test */}
+        {/* <GoogleButton onPress={handleGoogleLogin} text="Login with Google" /> */}
+        {/* <OrDivider /> */}
         <TextInput
           style={styles.input}
           placeholder="Email"
@@ -99,13 +114,23 @@ const LoginScreen: React.FC = () => {
           value={password}
           onChangeText={(text) => setPassword(text)}
         />
-        <TouchableOpacity style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>Log In</Text>
+
+        <TouchableOpacity
+          style={styles.forgotPasswordContainer}
+          onPress={handleForgotPassword}
+        >
+          <Text style={styles.forgotPassword}>Forgot Password?</Text>
         </TouchableOpacity>
 
-        <OrDivider />
-
-        <GoogleButton onPress={handleGoogleLogin} text="Login with Google" />
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleLogin}
+          disabled={loading}
+        >
+          <Text style={styles.buttonText}>
+            {loading ? "Logging in..." : "Log In"}
+          </Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           onPress={() => router.replace("/authentication/signup")}
@@ -161,6 +186,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontSize: 16,
   },
+  forgotPasswordContainer: {
+    width: "100%",
+    alignItems: "flex-end",
+    marginBottom: 10,
+  },
+  forgotPassword: {
+    color: "#3897f0",
+    fontSize: 14,
+  },
   button: {
     width: "100%",
     height: 50,
@@ -169,6 +203,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginVertical: 10,
+  },
+  buttonDisabled: {
+    backgroundColor: "#a6cbef",
   },
   buttonText: {
     color: "#fff",

@@ -1,7 +1,7 @@
 import { Stack } from "expo-router";
 import { fadeTransition } from "@/config/Transitions";
 
-export default function AuthenticationLayoutFunction() {
+export default function StandAloneLayout() {
   return (
     <Stack
       screenOptions={{
@@ -12,8 +12,7 @@ export default function AuthenticationLayoutFunction() {
         fullScreenGestureEnabled: true,
       }}
     >
-      <Stack.Screen name="login" />
-      <Stack.Screen name="signup" />
+      <Stack.Screen name="under_construction" />
     </Stack>
   );
 }
